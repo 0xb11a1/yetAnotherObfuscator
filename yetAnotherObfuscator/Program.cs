@@ -25,13 +25,13 @@ namespace yetAnotherObfuscator
             ModuleDefMD Module = ModuleDefMD.Load(path);
             AssemblyDef Assembly = Module.Assembly;
             
-            ManipulateStrings.Fire(Module);
+            ManipulateStrings.PerformStringEncryption(Module);
             ChangeMethodsName.Fire(Module, Default_Assembly);
 
             Console.WriteLine("[+] Saving the obfuscated file");
             SaveToFile(Module, path);
 
-            Console.WriteLine("[+] Chaning exe GUID");
+            Console.WriteLine("[+] Changing exe GUID");
             ChangeGUID(Default_Assembly);
 
             Console.WriteLine("[+] All done, the obfuscated exe in: " + obf_path);
@@ -59,6 +59,7 @@ namespace yetAnotherObfuscator
         static void SaveToFile(ModuleDefMD moduleDef, string path) {
             ModuleWriterOptions moduleWriterOption = new ModuleWriterOptions(moduleDef);
             moduleWriterOption.MetadataOptions.Flags = moduleWriterOption.MetadataOptions.Flags | MetadataFlags.KeepOldMaxStack;
+            moduleWriterOption.Logger = DummyLogger.NoThrowInstance;
             moduleDef.Write(obf_path, moduleWriterOption);
         }
 

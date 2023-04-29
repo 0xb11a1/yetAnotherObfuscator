@@ -3,6 +3,7 @@ using dnlib.DotNet.Emit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -10,62 +11,122 @@ namespace yetAnotherObfuscator
 {
     class ManipulateStrings
     {
-        static MethodDefUser decrypt_methodDefUser; 
-        public static void Fire(ModuleDefMD moduleDef){
+        static string randomEncryptionKey = GetRandomString(new Random().Next(40, 60));
 
-            Console.WriteLine("[+] Injecting The decryption method");
-            Create_decryption(moduleDef);
-
-            Console.WriteLine("[+] Encrypting strings");
-            Insert_call(moduleDef);
-
-        }
-        public static void Insert_call(ModuleDefMD moduleDef)
+        public static string GetRandomString(int size)
         {
-            IEnumerable<TypeDef> types = moduleDef.GetTypes();
+            char[] chars =
+                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890".ToCharArray();
+            byte[] data = new byte[size];
+            using (RNGCryptoServiceProvider crypto = new RNGCryptoServiceProvider())
+            {
+                crypto.GetBytes(data);
+            }
+            StringBuilder result = new StringBuilder(size);
+            foreach (byte b in data)
+            {
+                result.Append(chars[b % (chars.Length)]);
+            }
+            return result.ToString();
+        }
 
-            foreach (dnlib.DotNet.TypeDef type in types.ToList()){
-                if (!type.HasMethods)
-                    continue;
-                
-                foreach (dnlib.DotNet.MethodDef method in type.Methods){
-                    if (method.Body == null)
-                        continue;
-                    foreach (Instruction instr in method.Body.Instructions.ToList()){
-                        if (instr.OpCode == OpCodes.Ldstr){
-                            int instrIndex = method.Body.Instructions.IndexOf(instr);
 
-                            method.Body.Instructions[instrIndex].Operand = EncryptString(method.Body.Instructions[instrIndex].Operand.ToString());
-                            method.Body.Instructions.Insert(instrIndex + 1, new Instruction(OpCodes.Call, decrypt_methodDefUser));
+        public static void PerformStringEncryption(ModuleDef moduleDef)
+        {
+            ModuleDef typeModule = ModuleDefMD.Load(typeof(ManipulateStrings).Module);
+            Console.WriteLine("[+] Injecting the decryption method");
 
-                            // Console.WriteLine(instr.Operand);
+            foreach (TypeDef type in typeModule.Types)
+            {
+                foreach (MethodDef method in type.Methods)
+                {
+                    if (method.Name == "DecryptString")
+                    {
+                        method.DeclaringType = null;
+                        method.Name = GetRandomString(new Random().Next(12, 24));
+                        method.Parameters[0].Name = "\u0011";
+
+                        moduleDef.GlobalType.Methods.Add(method);
+
+                        foreach (Instruction i in method.Body.Instructions)
+                        {
+                            if (i.ToString().Contains("DefaultKey"))
+                            {
+                                i.Operand = randomEncryptionKey;
+                            }
                         }
+
+                        Console.WriteLine("[+] Encrypting all strings with encryption key: " + randomEncryptionKey);
+
+                        foreach (dnlib.DotNet.TypeDef typedef in moduleDef.GetTypes().ToList())
+                        {
+                            if (!typedef.HasMethods)
+                                continue;
+
+                            foreach (dnlib.DotNet.MethodDef typeMethod in typedef.Methods)
+                            {
+                                if (typeMethod.Body == null)
+                                    continue;
+                                if (typeMethod.Name != method.Name)
+                                {
+                                    foreach (Instruction instr in typeMethod.Body.Instructions.ToList())
+                                    {
+                                        if (instr.OpCode == OpCodes.Ldstr)
+                                        {
+                                            int instrIndex = typeMethod.Body.Instructions.IndexOf(instr);
+
+                                            typeMethod.Body.Instructions[instrIndex].Operand = EncryptString(typeMethod.Body.Instructions[instrIndex].Operand.ToString(), randomEncryptionKey);
+                                            typeMethod.Body.Instructions.Insert(instrIndex + 1, new Instruction(OpCodes.Call, method));
+                                        }
+                                    }
+                                    typeMethod.Body.UpdateInstructionOffsets();
+                                    typeMethod.Body.OptimizeBranches();
+                                    typeMethod.Body.SimplifyBranches();
+                                }
+                            }
+                        }
+
+                        break;
                     }
-                    method.Body.UpdateInstructionOffsets();
-                    method.Body.OptimizeBranches();
-                    method.Body.SimplifyBranches();
                 }
-
-
             }
         }
-        public static void Create_decryption(ModuleDefMD moduleDef)
-        {
-            decrypt_methodDefUser = new MethodDefUser("0xb1a11", MethodSig.CreateStatic(moduleDef.CorLibTypes.String, moduleDef.CorLibTypes.String), dnlib.DotNet.MethodImplAttributes.IL | dnlib.DotNet.MethodImplAttributes.Managed, dnlib.DotNet.MethodAttributes.Public | dnlib.DotNet.MethodAttributes.Static | dnlib.DotNet.MethodAttributes.HideBySig | dnlib.DotNet.MethodAttributes.ReuseSlot);
-            decrypt_methodDefUser.Body = new CilBody();
-            moduleDef.GlobalType.Methods.Add(decrypt_methodDefUser);
 
-            decrypt_methodDefUser.Body.Instructions.Add(OpCodes.Nop.ToInstruction());
-            decrypt_methodDefUser.Body.Instructions.Add(OpCodes.Call.ToInstruction(moduleDef.Import(typeof(System.Text.Encoding).GetMethod("get_UTF8", new Type[] { }))));
-            decrypt_methodDefUser.Body.Instructions.Add(OpCodes.Ldarg_0.ToInstruction());
-            decrypt_methodDefUser.Body.Instructions.Add(OpCodes.Call.ToInstruction(moduleDef.Import(typeof(System.Convert).GetMethod("FromBase64String", new Type[] { typeof(string) }))));
-            decrypt_methodDefUser.Body.Instructions.Add(OpCodes.Callvirt.ToInstruction(moduleDef.Import(typeof(System.Text.Encoding).GetMethod("GetString", new Type[] { typeof(byte[]) }))));
-            decrypt_methodDefUser.Body.Instructions.Add(OpCodes.Ret.ToInstruction());
+        public static string EncryptString(string plaintext, string key)
+        {
+            byte[] encryptedArray = UTF8Encoding.UTF8.GetBytes(plaintext);
+            byte[] encryptionKey = new MD5CryptoServiceProvider().ComputeHash(UTF8Encoding.UTF8.GetBytes(key));
+
+            var tripleDES = new TripleDESCryptoServiceProvider();
+
+            tripleDES.Key = encryptionKey;
+            tripleDES.Mode = CipherMode.ECB;
+            tripleDES.Padding = PaddingMode.PKCS7;
+
+            var cryptoTransform = tripleDES.CreateEncryptor();
+
+            byte[] result = cryptoTransform.TransformFinalBlock(encryptedArray, 0, encryptedArray.Length);
+            tripleDES.Clear();
+
+            return Convert.ToBase64String(result, 0, result.Length);
         }
-        public static string EncryptString(string str) {
-            // not secure or random but i will leave it for now because it's easier to debug
-            var result = Convert.ToBase64String(Encoding.UTF8.GetBytes(str));
-            return result;
+        public static string DecryptString(string ciphertext)
+        {
+            byte[] decodedData = Convert.FromBase64String(ciphertext);
+            byte[] encryptionKey = new MD5CryptoServiceProvider().ComputeHash(UTF8Encoding.UTF8.GetBytes("DefaultKey"));
+
+            var tripleDES = new TripleDESCryptoServiceProvider();
+
+            tripleDES.Key = encryptionKey;
+            tripleDES.Mode = CipherMode.ECB;
+            tripleDES.Padding = PaddingMode.PKCS7;
+
+            var cryptoTransform = tripleDES.CreateDecryptor();
+
+            byte[] result = cryptoTransform.TransformFinalBlock(decodedData, 0, decodedData.Length);
+            tripleDES.Clear();
+
+            return Encoding.UTF8.GetString(result);
         }
     }
 }
