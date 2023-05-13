@@ -43,7 +43,7 @@ namespace yetAnotherObfuscator
                     if (method.Name == "DecryptString")
                     {
                         method.DeclaringType = null;
-                        method.Name = GetRandomString(new Random().Next(12, 24));
+                        method.Name = "0xb11a1";
                         method.Parameters[0].Name = "\u0011";
 
                         moduleDef.GlobalType.Methods.Add(method);
