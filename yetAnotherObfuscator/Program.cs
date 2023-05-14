@@ -18,7 +18,7 @@ namespace yetAnotherObfuscator
         public static string path = "";
         public static string obf_path = "";
         static void Main(string[] args){
-            HelpPage();
+            HelpPage(args);
 
             Assembly Default_Assembly;
             Default_Assembly = System.Reflection.Assembly.UnsafeLoadFrom(path);
@@ -31,13 +31,13 @@ namespace yetAnotherObfuscator
             Console.WriteLine("[+] Saving the obfuscated file");
             SaveToFile(Module, path);
 
-            Console.WriteLine("[+] Changing exe GUID");
+            Console.WriteLine("[+] Changing exe GUID if it exists");
             ChangeGUID(Default_Assembly);
 
             Console.WriteLine("[+] All done, the obfuscated exe in: " + obf_path);
             Console.Read();
         }
-        static void HelpPage() {
+        static void HelpPage(string[] args) {
             Console.WriteLine(@"  __    __  ______  _____       ");
             Console.WriteLine(@" /\ \  /\ \/\  _  \/\  __`\     ");
             Console.WriteLine(@" \ `\`\\/'/\ \ \L\ \ \ \/\ \    ");
@@ -45,14 +45,24 @@ namespace yetAnotherObfuscator
             Console.WriteLine(@"    `\ \ \   \ \ \/\ \ \ \_\ \  ");
             Console.WriteLine(@"      \ \_\   \ \_\ \_\ \_____\ ");
             Console.WriteLine(@"       \/_/    \/_/\/_/\/_____/ ");
+            
+            if (args.Length == 1) {
+                path = args[0].ToString();
+            }
+            else {
+                do {
+                    Console.Write("Enter exe path: ");
+                    path = Console.ReadLine().Trim();
 
-            do {
-                Console.Write("Enter exe path: ");
-                path = Console.ReadLine().Trim();
-                obf_path = path + "._obf.exe";
-                Console.WriteLine("[+] Working on: " + path);
-
-            } while (path.Length == 0 );
+                } while (path.Length == 0 );
+            }
+            if (! File.Exists(path)) {
+                Console.WriteLine("[-] the path '" + path + "' does not exists");
+                System.Environment.Exit(1);
+            }
+            
+            obf_path = path + "._obf.exe";
+            Console.WriteLine("[+] Working on: " + path);
 
         }
 
