@@ -5,3 +5,16 @@ A C# obfuscator tool that can bypass Windows Defender antivirus. I made this too
 This is an **alpha** release, so expect some nice bugs.
 
 ![image info](./img/demo.png)
+
+### Usage:
+
+Drag drop the C# exe into yetAnotherObfuscator.exe
+Or provide the C# exe as an argument:
+
+```powershell
+.\yetAnotherObfuscator.exe <PATH_TO_EXE>
+```
+
+### Contributors ✨
+
+@Resit
